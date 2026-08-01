@@ -1,8 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
-import "./index.css"; // ONLY this CSS
+import { ThemeProvider } from "./theme/ThemeContext";
+import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
 );

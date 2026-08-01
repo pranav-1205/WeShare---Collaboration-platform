@@ -1,0 +1,95 @@
+﻿/* ==========================================
+   WeShare â€” Lumina Design System
+   ========================================== */
+
+/* =========================
+   Fonts (loaded in index.html)
+========================= */
+
+/* =========================
+   Theme Variables
+========================= */
+:root {
+  /* â”€â”€ Surfaces â”€â”€ */
+  --surface: #faf8ff;
+  --surface-dim: #d2d9f4;
+  --surface-bright: #faf8ff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f2f3ff;
+  --surface-container: #eaedff;
+  --surface-container-high: #e2e7ff;
+  --surface-container-highest: #dae2fd;
+  --surface-variant: #dae2fd;
+  --surface-tint: #494bd6;
+
+  /* â”€â”€ Primary (Electric Indigo) â”€â”€ */
+  --primary: #4648d4;
+  --on-primary: #ffffff;
+  --primary-container: #6063ee;
+  --on-primary-container: #fffbff;
+  --inverse-primary: #c0c1ff;
+  --primary-fixed: #e1e0ff;
+  --primary-fixed-dim: #c0c1ff;
+
+  /* â”€â”€ Secondary (Violet) â”€â”€ */
+  --secondary: #6b38d4;
+  --on-secondary: #ffffff;
+  --secondary-container: #8455ef;
+  --on-secondary-container: #fffbff;
+  --secondary-fixed: #e9ddff;
+
+  /* â”€â”€ Tertiary (Cyan) â”€â”€ */
+  --tertiary: #006577;
+  --on-tertiary: #ffffff;
+  --tertiary-container: #008096;
+  --on-tertiary-container: #f9fdff;
+  --tertiary-fixed: #acedff;
+
+  /* â”€â”€ On Surface â”€â”€ */
+  --on-surface: #131b2e;
+  --on-surface-variant: #464554;
+  --inverse-surface: #283044;
+  --inverse-on-surface: #eef0ff;
+  --on-background: #131b2e;
+  --background: #faf8ff;
+
+  /* â”€â”€ Outline â”€â”€ */
+  --outline: #767586;
+  --outline-variant: #c7c4d7;
+
+  /* â”€â”€ Error â”€â”€ */
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+
+  /* â”€â”€ Spacing â”€â”€ */
+  --base: 8px;
+  --container-max: 1280px;
+  --gutter: 24px;
+  --margin-mobile: 16px;
+  --margin-desktop: 40px;
+  --stack-sm: 12px;
+  --stack-md: 24px;
+  --stack-lg: 48px;
+
+  /* â”€â”€ Radii â”€â”€ */
+  --radius-sm: 0.25rem;
+  --radius: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --radius-3xl: 3rem;
+  --radius-full: 9999px;
+
+  /* â”€â”€ Shadows â”€â”€ */
+  --shadow-sm: 0 1px 3px rgba(19, 27, 46, 0.06);
+  --shadow-md: 0 4px 12px rgba(19, 27, 46, 0.08);
+  --shadow-lg: 0 10px 30px rgba(19, 27, 46, 0.1);
+  --shadow-xl: 0 20px 50px rgba(19, 27, 46, 0.12);
+  --shadow-primary: 0 6px 24px rgba(70, 72, 212, 0.25);
+}
+
+/* =========================
+   Reset & Base
+========================= */

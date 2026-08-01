@@ -1,38 +1,72 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import toast from "react-hot-toast";
+import { useAuth } from "../auth/useAuth";
 
 export default function Join() {
   const [link, setLink] = useState("");
   const navigate = useNavigate();
   const { state } = useLocation();
+  const { user } = useAuth();
 
-  const userName = state?.userName;
+  const userName = state?.userName || user?.username;
 
   if (!userName) {
-    return <h3 style={{ textAlign: "center" }}>Go back and enter your name</h3>;
+    return (
+      <div className="join-page">
+        <div className="join-page-card glass-surface">
+          <h2>No identity found</h2>
+          <p>Go back to the home page and enter your name first.</p>
+          <button className="btn btn-primary" onClick={() => navigate("/")}>
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const join = () => {
     const noteId = link.split("/").pop();
+    if (!link.trim() || !noteId) {
+      toast.error("Paste a valid note link");
+      return;
+    }
+
     navigate(`/note/${noteId}`, {
-      state: { userName }
+      state: { userName },
     });
   };
 
   return (
-    <div style={{ textAlign: "center", marginTop: "120px" }}>
-      <h2>Join a Note</h2>
+    <div className="join-page">
+      <div className="join-page-card glass-surface fade-in-up">
+        <div className="join-card-head">
+          <h2>Join a Note</h2>
+          <p>Paste the shared link to start collaborating</p>
+        </div>
 
-      <input
-        placeholder="Paste note link"
-        value={link}
-        onChange={(e) => setLink(e.target.value)}
-        style={{ width: "300px", padding: "10px" }}
-      />
+        <div className="field">
+          <label htmlFor="link">Note link</label>
+          <input
+            id="link"
+            className="input-box"
+            placeholder="https://.../note/..."
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && join()}
+          />
+        </div>
 
-      <br /><br />
+        <button className="btn btn-primary btn-lg" onClick={join}>
+          <span className="material-symbols-outlined">arrow_forward</span>
+          Join Note
+        </button>
 
-      <button onClick={join}>Join</button>
+        <button className="btn btn-ghost" onClick={() => navigate("/")}>
+          <span className="material-symbols-outlined">arrow_back</span>
+          Back to Home
+        </button>
+      </div>
     </div>
   );
 }

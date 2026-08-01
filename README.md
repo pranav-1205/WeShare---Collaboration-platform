@@ -31,6 +31,10 @@ This project enables users to:
 * See active users in the session
 * Automatically save content to the database
 * Leave and rejoin without losing data
+* **Rename notes** (owner only)
+* **Control write permissions** per collaborator (owner only)
+* **Remove/kick users** from session (owner only)
+* **View participants** in a Google Meet-style side panel
 
 The system uses **CRDTs (Conflict-Free Replicated Data Types)** to ensure **conflict-free real-time collaboration** even when multiple users edit simultaneously.
 
@@ -44,6 +48,8 @@ The system uses **CRDTs (Conflict-Free Replicated Data Types)** to ensure **conf
 * **Autosave with debounce**
 * **Presence tracking (active users)**
 * **Stateless user identity (no login system)**
+* **Role-based write permissions**
+* **Participant management panel**
 
 ---
 
@@ -56,6 +62,8 @@ The system uses **CRDTs (Conflict-Free Replicated Data Types)** to ensure **conf
 * **Yjs + y-quill** – Real-time CRDT sync
 * **Socket.IO Client**
 * **React Router**
+* **qrcode.react** – QR code sharing
+* **react-hot-toast** – Notifications
 * **Custom modern CSS (no frameworks)**
 
 ### Backend
@@ -113,18 +121,35 @@ Task-03-Collaboration-Tool/
 * Users can create a note instantly
 * A unique MongoDB `_id` is generated
 * Shareable link allows others to join
+* **QR code for instant mobile sharing**
 
 ### 🔹 Real-Time Collaboration
 
 * Multiple users can type simultaneously
 * Changes sync instantly using Yjs
 * No overwriting or conflicts
+* **Read-only mode for new users by default**
+
+### 🔹 Participant Management (Owner Controls)
+
+* **Google Meet-style side panel** — slide-in from right with all participants
+* **Per-user write permissions** — toggle between "Can edit" / "Read-only"
+* **Remove/kick users** — they cannot rejoin (banned until room clears)
+* **Owner badge** — always has write access
+* **"You" badge** — identifies current user
 
 ### 🔹 Active Users Presence
 
 * Displays who is currently in the note
-* Owner is highlighted
+* Owner is highlighted with badge
 * Users disappear when they leave
+* **Read-only badge (👁️)** shown for view-only participants
+
+### 🔹 Note Title
+
+* **Editable title at top** (owner only)
+* Real-time sync across all clients
+* Auto-saves on blur (debounced)
 
 ### 🔹 Autosave
 
@@ -137,10 +162,12 @@ Task-03-Collaboration-Tool/
 * Users join by entering a name
 * Kahoot-style UX
 
-### 🔹 Navigation Controls
+### 🔹 Navigation & Sharing
 
 * Back button to leave the editor
 * Copy link button for sharing
+* QR code modal for mobile sharing
+* **Explicit leave event** for clean disconnect
 
 ---
 
@@ -153,17 +180,31 @@ Task-03-Collaboration-Tool/
 5. All clients stay in sync automatically
 6. Periodic updates are saved to MongoDB
 
+**Write Permission Flow:**
+1. New users join with `canWrite: false` (read-only)
+2. Owner sees toggle buttons in side panel
+3. Owner toggles → server broadcasts `permission-changed`
+4. Target user's Quill editor switches to/from read-only
+5. Server rejects `update` events from users without write permission
+
 ---
 
 ## 📡 Socket Events
 
-| Event         | Description                   |
-| ------------- | ----------------------------- |
-| `join-note`   | User joins a note session     |
-| `sync`        | Initial document + users list |
-| `update`      | Document updates              |
-| `user-joined` | Presence update               |
-| `user-left`   | Presence cleanup              |
+| Event            | Direction       | Description                              |
+| ---------------- | --------------- | ---------------------------------------- |
+| `join-note`      | Client → Server | User joins a note session                |
+| `leave-note`     | Client → Server | Explicit leave (clean disconnect)        |
+| `sync`           | Server → Client | Initial document + users + permissions   |
+| `update`         | Both            | Document CRDT updates                    |
+| `user-joined`    | Server → Client | Presence: new user joined                |
+| `user-left`      | Server → Client | Presence: user left/kicked               |
+| `remove-user`    | Client → Server | Owner kicks a user                       |
+| `toggle-write`   | Client → Server | Owner changes write permission           |
+| `permission-changed` | Server → Client | Broadcast permission change            |
+| `update-title`   | Client → Server | Owner updates note title                 |
+| `title-changed`  | Server → Client | Broadcast title change                   |
+| `error`          | Server → Client | Error messages (kicked, not found, etc.) |
 
 ---
 
@@ -171,9 +212,9 @@ Task-03-Collaboration-Tool/
 
 ```js
 Note {
-  title: String,
-  content: Buffer,   // Yjs encoded state
-  owner: String,
+  title: String,           // Note title (editable by owner)
+  content: Buffer,         // Yjs encoded state
+  owner: String,           // Creator's name
   createdAt: Date,
   updatedAt: Date
 }
@@ -235,10 +276,13 @@ http://localhost:5173
 
 1. Enter your name on the Home page
 2. Click **Create New Note**
-3. Start writing
-4. Copy the share link
-5. Open link in another browser/tab
-6. Collaborate in real time
+3. **Click the title at top** to rename (owner only)
+4. Start writing
+5. Click **Participants** (people icon) in top bar to open side panel
+6. **Owner**: toggle write permissions / remove users from panel
+7. Copy the share link or use QR code
+8. Open link in another browser/tab
+9. Collaborate in real time
 
 ---
 
@@ -252,6 +296,8 @@ This project demonstrates:
 * Frontend–backend integration
 * State management under concurrency
 * Clean UI/UX without heavy libraries
+* Role-based access control in real-time apps
+* Client-side optimistic UI with server validation
 
 ---
 
@@ -259,10 +305,11 @@ This project demonstrates:
 
 * Cursor presence (Google Docs style)
 * Version history
-* Read-only viewers
-* User avatars
 * Dark/Light mode toggle
 * Export notes as PDF/Markdown
+* User avatars with image upload
+* Rich text formatting toolbar enhancements
+* Commenting/annotations
 
 ---
 
