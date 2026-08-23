@@ -23,6 +23,19 @@ export default function Home() {
   const { user, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
+  if (authLoading) {
+    return (
+      <div className="join-page">
+        <div className="join-page-card glass-surface">
+          <div className="spinner" style={{ margin: "0 auto" }}></div>
+          <p style={{ textAlign: "center", marginTop: "16px", color: "var(--on-surface-variant)" }}>
+            Loading...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
