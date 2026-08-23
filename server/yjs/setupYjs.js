@@ -10,6 +10,7 @@ const saveTimers = new Map();
 const activeUsers = new Map();
 const kickedUsers = new Map();
 const writePermissions = new Map();
+const userAwareness = new Map(); // noteId -> Map<socketId, awarenessState>
 
 function verifySocketToken(token) {
   if (!token) return null;
@@ -87,7 +88,7 @@ export default function setupYjs(io) {
       }
       const perms = writePermissions.get(noteId);
 
-      const isOwner = isAuthenticated && note.ownerId.toString() === userId;
+      const isOwner = (isAuthenticated && note.ownerId.toString() === userId) || (!isAuthenticated && note.ownerName === userName);
       socket.data.isOwner = isOwner;
 
       perms.set(note.ownerName, true);
@@ -109,6 +110,19 @@ export default function setupYjs(io) {
         isOwner,
         authenticated: isAuthenticated,
       });
+
+      // Send existing awareness states to the new user
+      if (userAwareness.has(noteId)) {
+        const awarenessMap = userAwareness.get(noteId);
+        for (const [clientId, awarenessData] of awarenessMap.entries()) {
+          const { userName: _un, userId: _uid, ...awarenessState } = awarenessData;
+          socket.emit("awareness-update", {
+            userId: clientId,
+            userName: awarenessData.userName,
+            ...awarenessState,  // Spread cursor and user at top level
+          });
+        }
+      }
 
       socket.to(noteId).emit("user-joined", { userName, isOwner: false, authenticated: false });
 
@@ -206,14 +220,58 @@ export default function setupYjs(io) {
         }, 2000));
       });
 
+      // Awareness (cursor/selection presence)
+      socket.on("awareness-update", (data) => {
+        const { clientID, ...awarenessState } = data;
+        if (!clientID) return;
+        
+        // Store clientID in socket.data for cleanup on disconnect
+        if (!socket.data.awarenessClientId) {
+          socket.data.awarenessClientId = clientID;
+        }
+        
+        if (!userAwareness.has(noteId)) {
+          userAwareness.set(noteId, new Map());
+        }
+        const awarenessMap = userAwareness.get(noteId);
+        awarenessMap.set(clientID, { ...awarenessState, userName, userId: clientID });
+
+        // Broadcast to others in the room
+        socket.to(noteId).emit("awareness-update", {
+          userId: clientID,
+          userName,
+          state: awarenessState,
+        });
+      });
+
       socket.on("disconnect", () => {
         if (activeUsers.has(noteId) && activeUsers.get(noteId).has(userName)) {
           activeUsers.get(noteId).delete(userName);
           if (activeUsers.get(noteId).size === 0) {
             activeUsers.delete(noteId);
             kickedUsers.delete(noteId);
+            // Clean up awareness when room is empty
+            userAwareness.delete(noteId);
+            // Flush pending save timer and force save document when last user leaves
+            if (saveTimers.has(noteId)) {
+              clearTimeout(saveTimers.get(noteId));
+              saveTimers.delete(noteId);
+            }
+            if (documents.has(noteId)) {
+              const ydoc = documents.get(noteId);
+              const state = Y.encodeStateAsUpdate(ydoc);
+              Note.findByIdAndUpdate(noteId, { content: Buffer.from(state) }).catch(console.error);
+              documents.delete(noteId); // Remove stale in-memory doc so next join loads from DB
+            }
           }
           socket.to(noteId).emit("user-left", userName);
+        }
+        // Clean up this user's awareness using stored clientID
+        const clientIDToRemove = socket.data.awarenessClientId;
+        if (clientIDToRemove && userAwareness.has(noteId)) {
+          const awarenessMap = userAwareness.get(noteId);
+          awarenessMap.delete(clientIDToRemove);
+          socket.to(noteId).emit("awareness-remove", { userId: clientIDToRemove });
         }
       });
 
@@ -223,8 +281,27 @@ export default function setupYjs(io) {
           if (activeUsers.get(noteId).size === 0) {
             activeUsers.delete(noteId);
             kickedUsers.delete(noteId);
+            userAwareness.delete(noteId);
+            // Flush pending save timer and force save document when last user leaves
+            if (saveTimers.has(noteId)) {
+              clearTimeout(saveTimers.get(noteId));
+              saveTimers.delete(noteId);
+            }
+            if (documents.has(noteId)) {
+              const ydoc = documents.get(noteId);
+              const state = Y.encodeStateAsUpdate(ydoc);
+              Note.findByIdAndUpdate(noteId, { content: Buffer.from(state) }).catch(console.error);
+              documents.delete(noteId); // Remove stale in-memory doc so next join loads from DB
+            }
           }
           socket.to(noteId).emit("user-left", userName);
+        }
+        // Clean up this user's awareness using stored clientID
+        const leaveClientIDToRemove = socket.data.awarenessClientId;
+        if (leaveClientIDToRemove && userAwareness.has(noteId)) {
+          const awarenessMap = userAwareness.get(noteId);
+          awarenessMap.delete(leaveClientIDToRemove);
+          socket.to(noteId).emit("awareness-remove", { userId: leaveClientIDToRemove });
         }
         socket.leave(noteId);
       });

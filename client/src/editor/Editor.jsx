@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Quill from "quill";
 import * as Y from "yjs";
 import { QuillBinding } from "y-quill";
+import { Awareness } from "y-protocols/awareness";
 import { QRCodeSVG } from "qrcode.react";
 import toast from "react-hot-toast";
 import { getSocket } from "../sockets/socket";
 import { useAuth } from "../auth/useAuth";
 import "quill/dist/quill.snow.css";
+
+// Import Quill cursor module for remote cursors
+import QuillCursors from "quill-cursors";
+import "quill-cursors/css";
+
+// Register QuillCursors at module scope (once) to avoid duplicate registration errors
+Quill.register("modules/cursors", QuillCursors);
 
 const AVATAR_COLORS = ["#4648d4", "#6b38d4", "#006577", "#283044", "#8455ef"];
 
@@ -32,7 +40,14 @@ export default function Editor({ noteId, userName }) {
   const editorRef = useRef(null);
   const quillRef = useRef(null);
   const ydocRef = useRef(null);
+  const bindingRef = useRef(null);
+  const awarenessRef = useRef(null);
   const syncedRef = useRef(false);
+  const initializingRef = useRef(false);
+  const joinedRef = useRef(false);
+  const undoManagerRef = useRef(null);
+  const connectionStatusRef = useRef("connecting");
+  const reconnectAttemptsRef = useRef(0);
 
   const [users, setUsers] = useState([]);
   const [owner, setOwner] = useState("");
@@ -42,6 +57,8 @@ export default function Editor({ noteId, userName }) {
   const [copied, setCopied] = useState(false);
   const [showPeoplePanel, setShowPeoplePanel] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const isOwnerRef = useRef(false);
+  const [connectionStatus, setConnectionStatus] = useState("connecting");
 
   const shareUrl = window.location.href;
 
@@ -55,38 +72,116 @@ export default function Editor({ noteId, userName }) {
     }
   };
 
+  // Update connection status
+  const updateConnectionStatus = useCallback((status) => {
+    connectionStatusRef.current = status;
+    setConnectionStatus(status);
+  }, []);
+
   useEffect(() => {
     if (!noteId || !userName) return;
 
     const socket = getSocket(socketToken);
 
-    if (!ydocRef.current) {
-      ydocRef.current = new Y.Doc();
-    }
-    const ydoc = ydocRef.current;
-    const ytext = ydoc.getText("quill");
+    // Track socket connection events for reconnection handling
+    setTimeout(() => {
+      if (socket.connected) {
+        updateConnectionStatus("connected");
+      } else {
+        updateConnectionStatus("connecting");
+      }
+    }, 0);
 
-    socket.emit("join-note", { noteId, userName });
+    socket.on("connect", () => {
+      updateConnectionStatus("connected");
+      reconnectAttemptsRef.current = 0;
+      // Don't re-join here - we emit join-note after setting up all listeners below
+      // This prevents double sync on initial connect
+    });
 
-    socket.once("sync", ({ update, owner: ownerName, users, writePermissions, title, isOwner: ownerFlag }) => {
-      setOwner(ownerName);
-      setIsOwner(ownerFlag);
-      setUsers(Array.isArray(users) ? users : []);
-      setWritePermissions(writePermissions || {});
-      setNoteTitle(title || "Untitled Note");
+    socket.on("disconnect", (reason) => {
+      if (reason === "io server disconnect") {
+        updateConnectionStatus("disconnected");
+      } else {
+        updateConnectionStatus("reconnecting");
+      }
+    });
 
-      Y.applyUpdate(ydoc, new Uint8Array(update));
+    socket.on("connect_error", () => {
+      reconnectAttemptsRef.current += 1;
+      updateConnectionStatus("reconnecting");
+    });
 
+    // Handle keyboard shortcuts for undo/redo
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (undoManagerRef.current) undoManagerRef.current.undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        if (undoManagerRef.current) undoManagerRef.current.redo();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    // Initialize editor with Yjs Awareness (handles cursors automatically via y-quill + quill-cursors)
+    const initializeEditor = (serverUpdate) => {
+      // Prevent double initialization - if already initialized, just apply the update
+      if (quillRef.current && syncedRef.current) {
+        // Already initialized, just apply the server update to existing Y.Doc
+        if (ydocRef.current) {
+          Y.applyUpdate(ydocRef.current, new Uint8Array(serverUpdate));
+        }
+        return;
+      }
+      
+      if (initializingRef.current) return;
+      initializingRef.current = true;
+
+      // Clean up previous instances on reconnection
+      if (bindingRef.current) {
+        bindingRef.current.destroy();
+        bindingRef.current = null;
+      }
+      if (undoManagerRef.current) {
+        undoManagerRef.current.destroy();
+        undoManagerRef.current = null;
+      }
+      if (awarenessRef.current) {
+        awarenessRef.current.destroy();
+        awarenessRef.current = null;
+      }
+      if (ydocRef.current) {
+        ydocRef.current.destroy();
+        ydocRef.current = null;
+      }
       if (quillRef.current) {
-        // Clean up previous Quill instance
-        const oldQuill = quillRef.current;
-        const container = oldQuill.container;
+        // Properly destroy Quill - remove all event listeners and clear container
+        quillRef.current.off("selection-change");
+        const container = quillRef.current.container;
         if (container) {
           container.innerHTML = "";
         }
         quillRef.current = null;
       }
 
+      // Create fresh Y.Doc and apply server state
+      const ydoc = new Y.Doc();
+      ydocRef.current = ydoc;
+      Y.applyUpdate(ydoc, new Uint8Array(serverUpdate));
+
+      const ytext = ydoc.getText("quill");
+
+      // Create Yjs Awareness for cursor/selection presence
+      const awareness = new Awareness(ydoc);
+      awarenessRef.current = awareness;
+      awareness.setLocalStateField("user", {
+        name: userName,
+        color: colorFor(userName),
+      });
+
+      // Create Quill editor with cursors module
       const quill = new Quill(editorRef.current, {
         theme: "snow",
         placeholder: "Start collaborating...",
@@ -97,29 +192,84 @@ export default function Editor({ noteId, userName }) {
             [{ list: "ordered" }, { list: "bullet" }],
             ["clean"],
           ],
+          cursors: true,
         },
       });
       quillRef.current = quill;
 
-      new QuillBinding(ytext, quill);
+      // Bind Y.Doc to Quill WITH awareness — y-quill handles remote cursors automatically
+      const binding = new QuillBinding(ytext, quill, awareness);
+      bindingRef.current = binding;
+
+      // Create undo manager
+      undoManagerRef.current = new Y.UndoManager(ytext, {
+        trackedOrigins: new Set([null]),
+        captureTimeout: 500,
+      });
 
       syncedRef.current = true;
+      initializingRef.current = false;
 
-      const canWrite = writePermissions?.[userName] === true || ownerName === userName || isOwner;
-      quill.enable(canWrite);
+      // Broadcast local cursor/selection changes via awareness
+      awareness.on("update", () => {
+        const states = awareness.getStates();
+        const localState = states.get(awareness.clientID);
+        if (localState && syncedRef.current) {
+          socket.emit("awareness-update", {
+            clientID: awareness.clientID,
+            ...localState,
+          });
+        }
+      });
 
+      // Send local Yjs updates to server
       ydoc.on("update", (update) => {
         if (syncedRef.current) {
           socket.emit("update", update);
         }
       });
-    });
 
-    socket.on("update", (update) => {
-      if (syncedRef.current) {
-        Y.applyUpdate(ydoc, new Uint8Array(update));
+      initializingRef.current = false;
+
+      return { ydoc, ytext, awareness, quill };
+    };
+
+    // Handle sync from server (both initial and reconnection)
+    const handleSync = ({ update, owner: ownerName, users, writePermissions, title, isOwner: ownerFlag }) => {
+      setOwner(ownerName);
+      setIsOwner(ownerFlag);
+      isOwnerRef.current = ownerFlag;
+      setUsers(Array.isArray(users) ? users : []);
+      setWritePermissions(writePermissions || {});
+      setNoteTitle(title || "Untitled Note");
+
+      const { quill } = initializeEditor(update);
+
+      // Use ownerFlag (from server) not isOwner (stale state)
+      const canWrite = writePermissions?.[userName] === true || ownerName === userName || ownerFlag;
+      quill.enable(canWrite);
+      const toolbar = quill.getModule('toolbar');
+      if (toolbar) {
+        toolbar.container.style.opacity = canWrite ? '1' : '0.5';
+        toolbar.container.style.pointerEvents = canWrite ? 'auto' : 'none';
       }
-    });
+    };
+
+    // Handle incoming updates from other clients
+    const handleUpdate = (update) => {
+      if (syncedRef.current && ydocRef.current) {
+        Y.applyUpdate(ydocRef.current, new Uint8Array(update));
+      }
+    };
+
+    // Only join once per mount
+    if (!joinedRef.current) {
+      joinedRef.current = true;
+      socket.emit("join-note", { noteId, userName });
+    }
+
+    socket.on("sync", handleSync);
+    socket.on("update", handleUpdate);
 
     socket.on("user-joined", (data) => {
       const name = typeof data === "string" ? data : data.userName;
@@ -142,8 +292,14 @@ export default function Editor({ noteId, userName }) {
       setWritePermissions((prev) => ({ ...prev, [targetUser]: canWrite }));
 
       if (targetUser === userName) {
-        quillRef.current?.enable(canWrite || isOwner);
-        if (canWrite || isOwner) {
+        const newCanWrite = canWrite || isOwnerRef.current;
+        quillRef.current?.enable(newCanWrite);
+        const toolbar = quillRef.current?.getModule('toolbar');
+        if (toolbar) {
+          toolbar.container.style.opacity = newCanWrite ? '1' : '0.5';
+          toolbar.container.style.pointerEvents = newCanWrite ? 'auto' : 'none';
+        }
+        if (newCanWrite) {
           toast.success("You can now edit");
         } else {
           toast("Switched to read-only mode", { icon: "👁️" });
@@ -155,9 +311,31 @@ export default function Editor({ noteId, userName }) {
       setNoteTitle(title);
     });
 
+    // Handle remote awareness updates (cursors/selections from other users)
+    socket.on("awareness-update", ({ userId, cursor, user, ...rest }) => {
+      if (awarenessRef.current && userId !== awarenessRef.current.clientID) {
+        const state = { cursor, user, ...rest };
+        if (state.cursor || state.user) {
+          awarenessRef.current.setRemoteState(userId, state);
+        } else {
+          awarenessRef.current.setRemoteState(userId, null);
+        }
+      }
+    });
+
+    socket.on("awareness-remove", ({ userId }) => {
+      if (awarenessRef.current) {
+        awarenessRef.current.setRemoteState(userId, null);
+      }
+    });
+
     socket.on("error", (message) => toast.error(message));
 
     return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
       socket.off("update");
       socket.off("sync");
       socket.off("user-joined");
@@ -165,16 +343,34 @@ export default function Editor({ noteId, userName }) {
       socket.off("permission-changed");
       socket.off("title-changed");
       socket.off("error");
+      socket.off("awareness-update");
+      socket.off("awareness-remove");
+      // Clean up Yjs & Quill
+      if (bindingRef.current) {
+        bindingRef.current.destroy();
+        bindingRef.current = null;
+      }
+      if (awarenessRef.current) {
+        awarenessRef.current.destroy();
+        awarenessRef.current = null;
+      }
+      if (undoManagerRef.current) {
+        undoManagerRef.current.destroy();
+        undoManagerRef.current = null;
+      }
+      if (ydocRef.current) {
+        ydocRef.current.destroy();
+        ydocRef.current = null;
+      }
       if (quillRef.current) {
         const container = quillRef.current.container;
-        if (container) {
-          container.innerHTML = "";
-        }
+        if (container) container.innerHTML = "";
         quillRef.current = null;
       }
       syncedRef.current = false;
+      joinedRef.current = false;
     };
-  }, [noteId, userName, navigate, socketToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [noteId, userName, navigate, socketToken, updateConnectionStatus]);
 
   if (!noteId || !userName) {
     return (
@@ -226,6 +422,15 @@ export default function Editor({ noteId, userName }) {
               <span className="material-symbols-outlined">people</span>
               <span className="btn-text hide-mobile">{users.length}</span>
             </button>
+
+            <div className="connection-status" title={`Connection: ${connectionStatus}`}>
+              <span className={`status-dot ${connectionStatus}`}></span>
+              <span className="status-text hide-mobile">
+                {connectionStatus === "connected" ? "Connected" :
+                 connectionStatus === "reconnecting" ? "Reconnecting..." :
+                 connectionStatus === "disconnected" ? "Offline" : "Connecting..."}
+              </span>
+            </div>
           </div>
         </div>
 

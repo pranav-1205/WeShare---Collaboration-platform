@@ -61,6 +61,10 @@ The application provides:
 * **React 19 (Vite)** – SPA
 * **Quill.js + y-quill** – rich text editor bound to Yjs
 * **Yjs** – CRDT data model
+* **y-protocols** – Yjs Awareness protocol
+* **quill-cursors** – remote cursor rendering for Quill
+* **Yjs Awareness** – cursor/selection presence
+* **Yjs UndoManager** – collaborative undo/redo
 * **Socket.IO Client**
 * **React Router** – routing
 * **qrcode.react** – QR-code sharing
@@ -160,6 +164,9 @@ Task-03-Collaboration-Tool/
 * Multiple users type simultaneously without conflicts (CRDT)
 * New participants default to **read-only**
 * The owner can grant/revoke **write access** per user
+* **Remote cursors & selections** — see where others are typing (Google Docs style)
+* **Connection status indicator** — Connected / Reconnecting / Offline
+* **Collaborative undo/redo** — your undo only affects your own edits
 
 ### 🔹 Owner Controls
 
@@ -178,6 +185,7 @@ Task-03-Collaboration-Tool/
 
 * Yjs state encoded and stored in MongoDB as a `Buffer`
 * Debounced (2s) writes reduce database load
+* **Force-save on last user leave** — content never lost
 * Rejoining reloads the document from the stored state
 
 ### 🔹 Theming
@@ -193,9 +201,12 @@ Task-03-Collaboration-Tool/
 1. A user opens a note link and joins the session
 2. The server loads the note from MongoDB and hydrates a `Y.Doc` (or reuses the in-memory one)
 3. The initial state is sent to the client via the `sync` event
-4. Edits propagate as Yjs CRDT updates over Socket.IO
-5. All clients apply the same updates → automatic convergence
-6. A debounced timer persists the full state back to MongoDB
+4. **Client initializes Yjs Awareness and UndoManager** (once per session)
+5. Edits propagate as Yjs CRDT updates over Socket.IO
+6. All clients apply the same updates → automatic convergence
+7. **Remote cursors/selections** broadcast via `awareness-update` events
+8. A debounced timer (2s) persists the full state back to MongoDB
+9. **On last user leave**, server force-saves immediately
 
 **Write Permission Flow:**
 1. New users join with read-only permission
@@ -203,6 +214,13 @@ Task-03-Collaboration-Tool/
 3. Server broadcasts `permission-changed` to every client
 4. The target client disables/enables Quill accordingly
 5. The server also rejects `update` events from users without write access
+
+**Reconnection Flow:**
+1. Socket disconnects (network issue, tab backgrounded)
+2. Client shows "Reconnecting..." status
+3. Socket reconnects, client re-sends `join-note`
+4. Server responds with fresh `sync` (current document state)
+5. Client applies update → seamless restoration
 
 ---
 
@@ -221,6 +239,8 @@ Task-03-Collaboration-Tool/
 | `permission-changed` | Server → Client | Broadcast permission change |
 | `update-title` | Client → Server | Owner updates note title |
 | `title-changed` | Server → Client | Broadcast title change |
+| `awareness-update` | Both | **Cursor/selection presence (Yjs Awareness)** |
+| `awareness-remove` | Server → Client | **Remove remote cursor on user leave** |
 | `error` | Server → Client | Error messages (kicked, not found, etc.) |
 
 ---
@@ -338,13 +358,13 @@ This project demonstrates:
 
 ## 🔮 Future Enhancements
 
-* Cursor / selection presence (Google Docs style)
 * Version history & restore
 * Export notes as PDF / Markdown
 * Image avatars / profile pictures
-* Offline editing with sync-on-reconnect
+* Offline editing with sync-on-reconnect (IndexedDB + Yjs)
 * Redis-backed state for horizontal scaling
 * Commenting / annotations
+* Rich text formatting: images, tables, code blocks
 
 ---
 

@@ -16,14 +16,14 @@ users) while guests can join as read-only collaborators.
 │  • ThemeContext      │                                      │                             │
 │  • Quill + y-quill   │   WebSocket (Socket.IO)              │  Socket.IO (realtime)       │
 │  • Yjs (CRDT client) │  ─────────────────────────────────▶   │   /join-note, /update, ...  │
-│                      │  ◀─────────────────────────────────   │   Yjs document store        │
-└──────────────────────┘        update sync + presence        └──────────────┬──────────────┘
-                                                                             │  Mongoose (ODM)
-                                                                             ▼
-                                                                   ┌──────────────────────┐
-                                                                   │     MongoDB (Atlas)    │
-                                                                   │   User, Note coll.     │
-                                                                   └──────────────────────┘
+│  • Yjs Awareness     │  ◀─────────────────────────────────   │   Yjs document store        │
+│  • Yjs UndoManager   │        update sync + presence        └──────────────┬──────────────┘
+└──────────────────────┘                                              │  Mongoose (ODM)
+                                                                     ▼
+                                                            ┌──────────────────────┐
+                                                            │     MongoDB (Atlas)    │
+                                                            │   User, Note coll.     │
+                                                            └──────────────────────┘
 ```
 
 ## Components
@@ -37,7 +37,7 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 | --- | --- |
 | `src/main.jsx` | Entry point; wraps `<App />` in `<ThemeProvider>` |
 | `src/App.jsx` | Router (`/`, `/login`, `/register`, `/join`, `/note/:noteId`) + `AuthProvider` + Toaster |
-| `src/auth/AuthContext.jsx` | Holds current `user`; `login`, `register`, `logout`, `refetch` via `fetch` with `credentials: "include"` |
+| `src/auth/AuthContext.jsx` | Holds current `user`; `login`, `register`, `logout`, `refetch` via `fetch` with `credentials: "include"`; provides `socketToken` for Socket.IO auth |
 | `src/auth/useAuth.js` | Hook to consume auth context |
 | `src/theme/ThemeProvider.jsx` | Dark/light state, persists to `localStorage`, writes `data-theme` on `<html>` |
 | `src/theme/themeContext.js` | `ThemeContext` + `useTheme()` + initial-theme helper (system preference) |
@@ -45,7 +45,7 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 | `src/pages/Login.jsx`, `src/pages/Register.jsx` | Auth screens |
 | `src/pages/join.jsx` | Paste-a-link entry point for guests/collaborators |
 | `src/pages/NotePage.jsx` | Route wrapper that resolves identity and renders `Editor` |
-| `src/editor/Editor.jsx` | The collaboration UI: Quill editor bound to Yjs, presence avatars, people panel, share/QR modal, owner controls |
+| `src/editor/Editor.jsx` | The collaboration UI: Quill editor bound to Yjs, **remote cursors/selections via Yjs Awareness**, **connection status indicator**, presence avatars, people panel, share/QR modal, owner controls, **Yjs UndoManager for collaborative undo/redo** |
 | `src/sockets/socket.js` | Singleton Socket.IO client (`getSocket(authToken)`, `disconnectSocket()`) |
 
 #### Editor data flow
@@ -53,11 +53,14 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 1. `Editor` creates a `Y.Doc` and calls `getSocket(socketToken)`.
 2. Emits `join-note { noteId, userName }`.
 3. Server responds with `sync` (encoded Yjs state, owner info, users, permissions, title).
-4. `QuillBinding(ydoc.getText("quill"), quill, provider)` keeps Quill ⇄ Yjs in sync.
+4. `QuillBinding(ydoc.getText("quill"), quill, awareness)` keeps Quill ⇄ Yjs in sync with **Yjs Awareness for remote cursors**.
 5. Local edits produce Yjs updates broadcast over Socket.IO; every client applies them
    (CRDT merges guarantee convergence).
-6. Read-only users have `quill.disable()` applied; the server independently rejects
+6. **`Y.UndoManager` tracks local changes only** — undo/redo affects only the current user's edits.
+7. **Connection status** tracked via Socket.IO events (`connect`, `disconnect`, `connect_error`).
+8. Read-only users have `quill.disable()` applied; the server independently rejects
    their `update` events.
+9. **On reconnection**, client re-sends `join-note`; server responds with fresh `sync` to restore state.
 
 ### Server (`server/`)
 
@@ -71,7 +74,7 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 | `controllers/controller.js` | Note CRUD + shared-notes query |
 | `models/user.js` | User schema; bcrypt (12 rounds) pre-save; `comparePassword`; password stripped from JSON |
 | `models/note.js` | Note schema; `collaborators[]` subdocs; indexes on `ownerId` and `collaborators.userId` |
-| `yjs/setupYjs.js` | Socket auth + full realtime collaboration layer |
+| `yjs/setupYjs.js` | Socket auth + full realtime collaboration layer + **Yjs Awareness relay** + **force-save on last user leave** |
 
 ## Authentication & Authorization
 
@@ -84,6 +87,7 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 - **Owner check** is always server-side: `note.ownerId.toString() === req.userId`.
 - **Write permission** is enforced twice — client-side (Quill disabled) and server-side
   (the `update` event is dropped for non-owners/non-writers).
+- **Guest owners** (unauthenticated users matching `ownerName`) can rename and manage permissions.
 
 ## REST API
 
@@ -115,6 +119,8 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 | `permission-changed` | S → C | Broadcast permission change |
 | `update-title` | C → S | Owner renames note |
 | `title-changed` | S → C | Broadcast new title |
+| `awareness-update` | C ↔ S | **Cursor/selection presence (Yjs Awareness state)** |
+| `awareness-remove` | S → C | **Remove remote cursor on user leave** |
 | `error` | S → C | Error (kicked, note not found, …) |
 
 ### In-memory collaboration state (`setupYjs.js`)
@@ -126,6 +132,7 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 | `writePermissions` | `noteId → Map<userName, boolean>` runtime write state |
 | `kickedUsers` | `noteId → Set<userName>` removed users (cleared when room empties) |
 | `saveTimers` | Debounced (2s) persistence of the full Yjs state to MongoDB |
+| `userAwareness` | `noteId → Map<clientID, awarenessState>` **remote cursor/selection state** |
 
 ## Data Model
 

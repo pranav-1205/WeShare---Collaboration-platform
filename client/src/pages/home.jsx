@@ -271,10 +271,6 @@ export default function Home() {
                   <div className="user-menu-header">
                     <div className="user-menu-name">{user.username}</div>
                   </div>
-                  <button className="user-menu-item" role="menuitem" onClick={() => { navigate("/"); setUserMenuOpen(false); }}>
-                    <span className="material-symbols-outlined">dashboard</span>
-                    My Notes
-                  </button>
                   <div className="user-menu-divider" />
                   <button className="user-menu-item" role="menuitem" onClick={() => { setUserMenuOpen(false); }}>
                     <span className="material-symbols-outlined">settings</span>
@@ -357,7 +353,9 @@ export default function Home() {
           ) : (
             <>
               <section className="recent-notes fade-in-up">
-                <h2>Recent Notes</h2>
+                <div className="section-header">
+                  <h2>Recent Notes</h2>
+                </div>
                 {loadingNotes ? (
                   <div className="notes-loading">Loading your notes...</div>
                 ) : filteredNotes.length === 0 ? (

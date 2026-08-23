@@ -2003,3 +2003,93 @@ max-width: 100vw;
     display: none !important;
   }
 }
+
+/* =========================
+   Connection Status Indicator
+========================= */
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.status-dot.connected {
+  background: var(--tertiary);
+  box-shadow: 0 0 6px var(--tertiary);
+}
+
+.status-dot.reconnecting {
+  background: var(--secondary);
+  box-shadow: 0 0 6px var(--secondary);
+  animation: pulseRing 1.5s ease-in-out infinite;
+}
+
+.status-dot.disconnected {
+  background: var(--error);
+  box-shadow: 0 0 6px var(--error);
+}
+
+.status-dot:not(.connected):not(.reconnecting):not(.disconnected) {
+  background: var(--outline);
+}
+
+/* =========================
+   Remote Cursors (Quill Cursors)
+========================= */
+.ql-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ql-cursor-caret {
+  position: absolute;
+  width: 2px;
+  height: 1.2em;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.ql-cursor-flag {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  font-family: "Inter", sans-serif;
+  transform: translateX(-50%);
+}
+
+.ql-cursor-selection {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+.ql-cursor-selection .ql-selection {
+  position: absolute;
+  background: inherit;
+}

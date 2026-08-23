@@ -4,9 +4,19 @@ const AuthContext = createContext(null);
 
 const API_URL = "http://localhost:3001/api";
 
+function getTokenFromCookie() {
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=');
+    if (name === 'token') return value;
+  }
+  return null;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [socketToken, setSocketToken] = useState(() => getTokenFromCookie());
 
   const fetchUser = useCallback(async () => {
     try {
@@ -14,11 +24,14 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
+        setSocketToken(getTokenFromCookie());
       } else {
         setUser(null);
+        setSocketToken(null);
       }
     } catch {
       setUser(null);
+      setSocketToken(null);
     } finally {
       setLoading(false);
     }
@@ -38,6 +51,7 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Login failed");
     setUser(data.user);
+    setSocketToken(getTokenFromCookie());
     return data.user;
   };
 
@@ -51,15 +65,17 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Registration failed");
     setUser(data.user);
+    setSocketToken(getTokenFromCookie());
     return data.user;
   };
 
   const logout = async () => {
     await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
     setUser(null);
+    setSocketToken(null);
   };
 
-  const value = { user, loading, login, register, logout, refetch: fetchUser };
+  const value = { user, loading, login, register, logout, refetch: fetchUser, socketToken };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
