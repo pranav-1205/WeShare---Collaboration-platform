@@ -4,6 +4,13 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../auth/useAuth";
 
+const API_URL = import.meta.env.VITE_SERVER_URL;
+
+const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: true,
+});
+
 export default function Home() {
   const [userName, setUserName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -36,7 +43,7 @@ export default function Home() {
   const fetchUserNotes = async () => {
     setLoadingNotes(true);
     try {
-      const res = await axios.get("http://localhost:3001/api/notes", { withCredentials: true });
+      const res = await api.get("/notes");
       setUserNotes(res.data || []);
     } catch (err) {
       console.error("Failed to fetch notes:", err);
@@ -47,7 +54,7 @@ export default function Home() {
 
   const fetchSharedNotes = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/notes/shared", { withCredentials: true });
+      const res = await api.get("/notes/shared");
       setSharedNotes(res.data || []);
     } catch (err) {
       console.error("Failed to fetch shared notes:", err);
@@ -63,9 +70,9 @@ export default function Home() {
 
     setCreating(true);
     try {
-      const res = await axios.post("http://localhost:3001/api/notes", {
+      const res = await api.post("/notes", {
         title: "Untitled Note",
-      }, { withCredentials: true });
+      });
 
       toast.success("Note created!");
       navigate(`/note/${res.data._id}`, {

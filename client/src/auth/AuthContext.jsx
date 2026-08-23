@@ -2,7 +2,7 @@ import { createContext, useState, useEffect, useCallback } from "react";
 
 const AuthContext = createContext(null);
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_SERVER_URL;
 
 function getTokenFromCookie() {
   const cookies = document.cookie.split(';');
