@@ -4,7 +4,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../auth/useAuth";
 
-const API_URL = import.meta.env.VITE_SERVER_URL;
+const API_URL = `${import.meta.env.VITE_SERVER_URL || "http://localhost:3001"}/api`;
 
 const api = axios.create({
   baseURL: API_URL,
