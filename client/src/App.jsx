@@ -6,6 +6,7 @@ import Join from "./pages/join";
 import NotePage from "./pages/NotePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ManageNotesPage from "./pages/ManageNotesPage";
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
         />
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/notes" element={<ManageNotesPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/join" element={<Join />} />

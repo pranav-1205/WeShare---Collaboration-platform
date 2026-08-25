@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../auth/useAuth";
+import SettingsModal from "../components/SettingsModal";
 
 const API_URL = `${import.meta.env.VITE_SERVER_URL || "http://localhost:3001"}/api`;
 
@@ -15,6 +16,7 @@ export default function Home() {
   const [userName, setUserName] = useState("");
   const [creating, setCreating] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userNotes, setUserNotes] = useState([]);
   const [sharedNotes, setSharedNotes] = useState([]);
@@ -292,7 +294,7 @@ export default function Home() {
                     <div className="user-menu-name">{user.username}</div>
                   </div>
                   <div className="user-menu-divider" />
-                  <button className="user-menu-item" role="menuitem" onClick={() => { setUserMenuOpen(false); }}>
+                  <button className="user-menu-item" role="menuitem" onClick={() => { setUserMenuOpen(false); setSettingsOpen(true); }}>
                     <span className="material-symbols-outlined">settings</span>
                     Settings
                   </button>
@@ -375,6 +377,10 @@ export default function Home() {
               <section className="recent-notes fade-in-up">
                 <div className="section-header">
                   <h2>Recent Notes</h2>
+                  <Link to="/notes" className="btn btn-secondary btn-sm manage-notes-btn">
+                    <span className="material-symbols-outlined">manage_accounts</span>
+                    <span className="btn-text hide-mobile">Manage Notes</span>
+                  </Link>
                 </div>
                 {loadingNotes ? (
                   <div className="notes-loading">Loading your notes...</div>
@@ -432,6 +438,7 @@ export default function Home() {
           )}
         </div>
       </main>
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

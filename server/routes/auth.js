@@ -1,5 +1,6 @@
 import express from "express";
 import User from "../models/user.js";
+import Note from "../models/note.js";
 import { generateToken, authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -103,6 +104,74 @@ router.get("/me", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Me error:", error);
     res.status(500).json({ message: "Failed to get user" });
+  }
+});
+
+router.patch("/me", authMiddleware, async (req, res) => {
+  try {
+    const { username, email } = req.body;
+    const user = await User.findById(req.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (username) {
+      const existingUser = await User.findOne({ username, _id: { $ne: req.userId } });
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+      user.username = username;
+    }
+
+    if (email) {
+      const existingUser = await User.findOne({ email: email.toLowerCase(), _id: { $ne: req.userId } });
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already in use" });
+      }
+      user.email = email.toLowerCase();
+    }
+
+    await user.save();
+    res.json({ user: { id: user._id, username: user.username, email: user.email } });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ message: messages.join(", ") });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Username or email already exists" });
+    }
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
+router.delete("/me", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await Note.deleteMany({ ownerId: req.userId });
+    await Note.updateMany(
+      { "collaborators.userId": req.userId },
+      { $pull: { collaborators: { userId: req.userId } } }
+    );
+
+    await User.findByIdAndDelete(req.userId);
+
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+
+    res.json({ message: "Account deleted successfully" });
+  } catch (error) {
+    console.error("Delete account error:", error);
+    res.status(500).json({ message: "Failed to delete account" });
   }
 });
 

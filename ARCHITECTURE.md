@@ -36,17 +36,19 @@ Vite + React 19 SPA. No UI framework — a hand-written "Lumina" design system l
 | File | Responsibility |
 | --- | --- |
 | `src/main.jsx` | Entry point; wraps `<App />` in `<ThemeProvider>` |
-| `src/App.jsx` | Router (`/`, `/login`, `/register`, `/join`, `/note/:noteId`) + `AuthProvider` + Toaster |
+| `src/App.jsx` | Router (`/`, `/notes`, `/login`, `/register`, `/join`, `/note/:noteId`) + `AuthProvider` + Toaster |
 | `src/auth/AuthContext.jsx` | Holds current `user`; `login`, `register`, `logout`, `refetch` via `fetch` with `credentials: "include"`; provides `socketToken` for Socket.IO auth |
 | `src/auth/useAuth.js` | Hook to consume auth context |
 | `src/theme/ThemeProvider.jsx` | Dark/light state, persists to `localStorage`, writes `data-theme` on `<html>` |
 | `src/theme/themeContext.js` | `ThemeContext` + `useTheme()` + initial-theme helper (system preference) |
-| `src/pages/home.jsx` | Dashboard: search, create note, "Recent Notes" (owned), "Shared With Me", user dropdown (theme toggle, logout) |
+| `src/pages/home.jsx` | Dashboard: search, create note, "Recent Notes" (owned), "Shared With Me", user dropdown (settings, logout), **Manage Notes link** |
+| `src/pages/ManageNotesPage.jsx` | **Dedicated note management page** (`/notes`): search, sort, multi-select, bulk delete, open/delete per-note via overflow menu |
 | `src/pages/Login.jsx`, `src/pages/Register.jsx` | Auth screens |
 | `src/pages/join.jsx` | Paste-a-link entry point for guests/collaborators |
 | `src/pages/NotePage.jsx` | Route wrapper that resolves identity and renders `Editor` |
 | `src/editor/Editor.jsx` | The collaboration UI: Quill editor bound to Yjs, **remote cursors/selections via Yjs Awareness**, **connection status indicator**, presence avatars, people panel, share/QR modal, owner controls, **Yjs UndoManager for collaborative undo/redo** |
 | `src/sockets/socket.js` | Singleton Socket.IO client (`getSocket(authToken)`, `disconnectSocket()`) |
+| `src/components/SettingsModal.jsx` | **Settings modal**: Profile (username only, email read-only), Appearance (theme), Account (logout, delete account) |
 
 #### Editor data flow
 
